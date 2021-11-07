@@ -14,6 +14,7 @@ python belayer.py (-i <10x directory> | -s <count matrix file> <spatial coordina
 Details of required and optional input arguments:
 
 Argument | Data type | Description
+---      | :---:     | ---
 -i (--indir) | str | Input 10X directory for ST data.
 -s (--stfiles) | list of str | Input count matrix file followed by spatial coordinate file for ST data. Count matrix and spatial coordinate must have the same number of spots. Only one of -i and -s is allowed.
 -m (--mode) | char | Running mode. A: axis-aligned layered tissue. R:rotated axis-aligned layered tissue. S:arbitrarily curved tissue supervised by annotated layers. L:layered tissue with linear layer boundaries.
@@ -24,7 +25,7 @@ Argument | Data type | Description
 
 
 ## Output
-+ <outprefix>_layer.csv. This file contains the identified layers for each spot.
++ "<outprefix>"_layer.csv. This file contains the identified layers for each spot.
 + estimated piecewise function coefficients file TBD.
 
 ## Example
