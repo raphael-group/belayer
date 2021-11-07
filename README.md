@@ -25,7 +25,7 @@ Argument | Data type | Description
 
 
 ## Output
-+ "<outprefix>"_layer.csv. This file contains the identified layers for each spot.
++ \<outprefix>_layer.csv. This file contains the identified layers for each spot.
 + estimated piecewise function coefficients file TBD.
 
 ## Example
