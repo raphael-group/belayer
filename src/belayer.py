@@ -83,13 +83,14 @@ if __name__ == "__main__":
     if args.mode == 'A':
         xcoords = pos[:,0]
         pooled_int_data, pooled_xcoords, map_1d_bins_to_2d = pool_data(count, xcoords)
-        layer_pooled, layer_2d = dp(pooled_count, pooled_xcoords, args.nlayers, map_1d_bins_to_2d)
+        layer_pooled, layer_2d = dp(pooled_int_data, pooled_xcoords, args.nlayers, map_1d_bins_to_2d)
 
     # ROTATED
     elif args.mode == 'R':
         angle, xcoords = find_rotation_angle(count, pos, args.nlayers)
+        logger.info("ESTIMATED ROTATION ANGLE={}".format(angle))
         pooled_int_data, pooled_xcoords,  map_1d_bins_to_2d = pool_data(count, xcoords)
-        layer_pooled, layer_2d = dp(pooled_count, pooled_xcoords, args.nlayers, map_1d_bins_to_2d)
+        layer_pooled, layer_2d = dp(pooled_int_data, pooled_xcoords, args.nlayers, map_1d_bins_to_2d)
 
     # SUPERVISED
     elif args.mode == 'S':

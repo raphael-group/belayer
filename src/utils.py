@@ -85,16 +85,29 @@ def read_input_st_files(stfiles):
     return np.array(count), np.array(pos), count.columns, count.index
 
 
-def pool_data(count, T):
-    G = count.shape[0]
-    xcoords_int = np.round(T).astype(int)
+
+# INPUT:
+# count: G x N count data matrix 
+# xcoords: N x 1 vector, has x coordinates for each spot
+
+# OUTPUT:
+# pooled count: G x N_1d matrix over pooled spots
+# pooled_xcoords: N_1d x 1 matrix of xcoords for each pooled spot 
+# map_1d_bins_to_2d: dictionary  mapping each pooled spot -> [2d spots pooled together]
+def pool_data(count, xcoords):
+    G,N = count.shape
+
+    xcoords_int = np.round(xcoords).astype(int)
     pooled_xcoords = np.sort(np.unique(xcoords_int))
     N_1d = pooled_xcoords.shape[0]
+
     # map b -> [list of cells in bin b]
     map_1d_bins_to_2d={}
-    pooled_count = np.zeros( (G, N_1d), dtype=np.int )
+    pooled_count = np.zeros( (G, N_1d) )
+
     for ind, b in enumerate(pooled_xcoords):
         bin_pts = np.where(xcoords_int == b)[0]
-        pooled_count[:,ind] = np.sum(data[bin_pts,:], axis=0)
+        pooled_count[:,ind] = np.sum(count[:,bin_pts], axis=1)
         map_1d_bins_to_2d[b] = bin_pts
+        
     return pooled_count, pooled_xcoords, map_1d_bins_to_2d
