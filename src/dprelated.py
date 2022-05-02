@@ -1,16 +1,31 @@
 import numpy as np
 from glmpca import glmpca
-from utils import rotate_by_theta
 
-# INPUT:
-# Y: matrix of size G x T
-# xcoords: list of T x-coordinates
+# TODO: add description!!
+def rotate_by_theta(coords, theta, rotate_about=np.array([0,0])):
+    """
+    Rotate coordinate array by angle theta.
 
-# OUTPUT:
-# Fit each row y_g of Y as y_g = xcoords * theta + const using linear regression
-# (1) theta, const for each gene g
-# (2) Total loss \sum_g ||y_g - yhat_g||^2 
+    :param coords: np.array of shape (N,2) points (rows).
+    :param theta: angle theta (in radians) to rotate by
+    :param rotate_about: (OPTIONAL) point to rotate about
+    :return: np.array of shape (N,2) where each point is rotated by theta
+    """
+    coordsT=coords.T
+    
+    c,s=np.cos(theta), np.sin(theta)
+    rotation_matrix=np.array(((c, -s), (s, c)))
+    
+    return (rotation_matrix @ coordsT).T
+
 def opt_linear(y, xcoords):
+    """
+    Fit each row y_g of Y as y_g = xcoords * theta + const using linear regression
+
+    :param y: np.array of shape (G,N)
+    :param xcoords: np.array of shape (N,) of x-coordinates.
+    :return: (1) theta, const for each gene g and (2) Total loss \sum_g ||y_g - yhat_g||^2 
+    """
     g,n = y.shape
     if n==1:
         return np.array([]),0
@@ -42,54 +57,70 @@ def opt_linear(y, xcoords):
 # (2) segment_map: pointers for DP table
 # (t,l) -> (t', l-1) where you use l-1 pieces for times 1,...,t' and one piece for t'+1,...,t
 def dp_raw(data, Lmax, xcoords, opt_function=opt_linear):
+    """
+    Dynamic programming algorithm for segmented regression
+
+    :param data: np.array of shape (G,N), either integer counts or GLM-PCs
+    :param Lmax: maximum number of layers
+    :param xcoords: np.array of shape (N,) of x-coordinates of each spot
+    :param opt_function: function to fit each segment (default is least squares for linear regression)
+
+    :return: (1) error_mat: DP table of size N x L
+             where error_mat[n,l] = error from using linreg to fit first n+1 
+             spots (after sorting by x-coordinate) using (l+1)-piece segmented regression,
+             (2) segment_map: pointers for DP table
+             (n,l) -> (n', l-1) where you use l-1 pieces for spots 1, ..., n' 
+             and one piece for spots n'+1, ..., N
+    """
+
     G=data.shape[0]
-    T=data.shape[1]
+    N=data.shape[1]
     
     sorted_xcoords=np.sort(xcoords)
     sorted_xcoords_inds=np.argsort(xcoords)
 
     # dp table error_mat (T x L)
     # where error_mat[t,l] = error from fitting first t+1 coords using (l+1)-piece segmented regression
-    error_mat=np.zeros((T,Lmax))
+    error_mat=np.zeros((N,Lmax))
 
     # map (t,p) -> (t', p-1) where you use p-1 segments for times 1,...,t' and a segment for t'+1,...,t
     segment_map={}
 
     # save previous calls to opt_function
-    saved_opt_functions=np.zeros((T+1,T+1)) - 1
+    saved_opt_functions=np.zeros((N+1,N+1)) - 1
 
     # fill out first column of matrix (0th row is just 0)
-    for t in range(T):
-        xc=sorted_xcoords[:t+1]
-        xc_inds=sorted_xcoords_inds[:t+1]
+    for n in range(N):
+        xc=sorted_xcoords[:n+1]
+        xc_inds=sorted_xcoords_inds[:n+1]
         
         _,err=opt_function(data[:,xc_inds],xc)
-        error_mat[t,0]=err
+        error_mat[n,0]=err
 
     # fill out each subsequent column l
     for l in range(1,Lmax):
 
         # for each column, go from top to bottom [ignoring first row]
-        for t in range(T):
-            best_tprime=-1
+        for n in range(N):
+            best_nprime=-1
             best_error=np.Inf
 
-            for tprime in range(t):
-                if saved_opt_functions[tprime+1,t+1] >= 0:
-                    tprime_fit=saved_opt_functions[tprime+1,t+1]
+            for nprime in range(n):
+                if saved_opt_functions[nprime+1,n+1] >= 0:
+                    nprime_fit=saved_opt_functions[nprime+1,n+1]
                 else:
-                    xc=sorted_xcoords[tprime+1:t+1]
-                    xc_inds=sorted_xcoords_inds[tprime+1:t+1]
+                    xc=sorted_xcoords[nprime+1:n+1]
+                    xc_inds=sorted_xcoords_inds[nprime+1:n+1]
                     
-                    tprime_fit=opt_function(data[:,xc_inds], xc)[1]
-                    saved_opt_functions[tprime+1,t+1]=tprime_fit
-                cur_error=error_mat[tprime,l-1] + tprime_fit
+                    nprime_fit=opt_function(data[:,xc_inds], xc)[1]
+                    saved_opt_functions[nprime+1,n+1]=nprime_fit
+                cur_error=error_mat[nprime,l-1] + nprime_fit
 
                 if cur_error < best_error:
                     best_error=cur_error
-                    best_tprime=tprime
-            error_mat[t,l] = best_error
-            segment_map[(t,l)] = (best_tprime,l-1)
+                    best_nprime=nprime
+            error_mat[n,l] = best_error
+            segment_map[(n,l)] = (best_nprime,l-1)
 
     return error_mat, segment_map
 
@@ -106,8 +137,25 @@ def dp_raw(data, Lmax, xcoords, opt_function=opt_linear):
 # (2) segment_map: pointers for DP table
 # (t,l) -> (t', l-1) where you use l-1 pieces for times 1,...,t' and one piece for t'+1,...,t
 def dp_bucketized(data, bucket_endpoints, Lmax, xcoords, opt_function=opt_linear):
+    """
+    Dynamic programming algorithm for segmented regression
+    where the x-coordinates are partitioned into B equally spaced buckets
+
+    :param data: np.array of shape (G,N), either integer counts or GLM-PCs
+    :param bucket_endpoints: np.array of shape (B+1), the endpoints of the B buckets
+    :param Lmax: maximum number of layers
+    :param xcoords: np.array of shape (N,) of x-coordinates for each spot
+    :param opt_function: function to fit each segment (default is least squares for linear regression)
+
+    :return: (1) error_mat: DP table of size B x L
+             where error_mat[b,l] = error from using linreg to fit first 
+             spots in first b+1 buckets using (l+1)-piece segmented regression,
+             (2) segment_map: pointers for DP table
+             (b,l) -> (b', l-1) where you use l-1 pieces for buckets 1,...,b' 
+             and one piece for buckets b'+1,...,t
+    """
     G=data.shape[0]
-    T=data.shape[1]
+    N=data.shape[1]
     
     B=len(bucket_endpoints)-1
     buckets=np.digitize(xcoords, bucket_endpoints) - 1 # for some reason bucket labels are 1-indexed
@@ -163,24 +211,31 @@ def dp_bucketized(data, bucket_endpoints, Lmax, xcoords, opt_function=opt_linear
     return error_mat, segment_map
 
 
-# INPUT (TODO: UPDATE)
-# data: matrix of size G x N (count matrix or GLM-PC reduced matrix)
-# xcoords: array of size N x 1 of xcoords
-# L: number of pieces
-
-# OUTPUT:
-# layer_pooled: N_1d x 1 matrix of layer labels for each pooled spot
-# layer_pooled: N x 1 matrix of layer labels for each (2D) spot
-# def dp(count, xcoords, L, use_buckets=True, num_buckets=150):
 def rotation_dp(data, coords, Lmax=8, rotation_angle_list=[0,5,10,15,17.5,20], 
-                use_buckets=True, num_buckets=150, glmpca_penalty=10,
-               opt_function=opt_linear):
-    
+                use_buckets=True, num_buckets=150, opt_function=opt_linear):
+    """
+    Rotation mode of Belayer.
+    Rotates the tissue slice by different angles and runs the above DP functions.
+
+    :param data: np.array of shape (G,N), either integer counts or GLM-PCs
+    :param coords: np.array of shape (N,2), i-th row is coordinate of spot i
+    :param Lmax: maximum number of layers
+    :param rotation_angle_list: list of angles (in degrees) to rotate tissue by
+    :param use_buckets: boolean indicating whether to divide x-coordinates into 
+                        equally spaced buckets or not. 
+                        (Lower spatial resolution but faster run-time)
+    :param num_buckets: (if use_buckets=True) number of buckets to divide 
+                        x-coordinate range into
+    :param opt_function: function to fit each segment (default is least squares for linear regression)
+
+    :return: (1) losses: np.array of shape (number of rotation angles, Lmax)
+            where losses[a,l] = DP loss from running segmented regression with l pieces
+            on tissue rotated by angle rotation_angle_list[a]
+            (2) labels: dict where [a,l] -> DP labels  from running segmented regression 
+            with l pieces on tissue rotated by angle rotation_angle_list[a]
+    """
     G = data.shape[0]
     N = data.shape[1]
-
-    # glmpca_res = glmpca.glmpca(count, 2*Lmax, fam="poi", penalty=glmpca_penalty, verbose=True)
-    # F_glmpca = glmpca_res['factors']
     
     # loop over all angles in rotation_angle_list
     theta_list=[deg*np.pi/180 for deg in rotation_angle_list]
@@ -231,9 +286,16 @@ def rotation_dp(data, coords, Lmax=8, rotation_angle_list=[0,5,10,15,17.5,20],
                 labels[(ind_t,l)]=dp_labels
     return losses,labels
 
-# backtrack through DP to find l segments
-# TODO: add description!!
-def find_segments_from_dp(error_mat, segment_map, l,xcoords=None):
+def find_segments_from_dp(error_mat, segment_map, l, xcoords=None):
+    """
+    Backtrack through DP output to find the l segments
+
+    :param error_mat, segment_map: outputs of dp_bucketized or dp_raw
+    :param l: number of segments
+    :param xcoords: (Optional) x-coordinates for each spot
+    
+    :return: array of l segments of DP
+    """
     num_times=error_mat.shape[0]
     
     segs=[[] for i in range(l)]
@@ -254,11 +316,3 @@ def find_segments_from_dp(error_mat, segment_map, l,xcoords=None):
     segs[0]=np.arange(0,time_val+1)
     return segs
 
-# TODO: add description!!
-def rotate_by_theta(coords, theta, rotate_about=np.array([0,0])):
-    coordsT=coords.T
-    
-    c,s=np.cos(theta), np.sin(theta)
-    rotation_matrix=np.array(((c, -s), (s, c)))
-    
-    return (rotation_matrix @ coordsT).T
