@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from utils import rotate_by_theta
 
 # Model selection
 
@@ -27,6 +28,7 @@ def belayer_output(labels, coords, best_L, best_angle, rotation_angle_list=[0,5,
     belayer_labels=labels[(best_angle_ind,best_L)]
 
     # plot labels
+    print(rotate_by_theta)
     coords_rotated=rotate_by_theta(coords,best_angle*np.pi/180)
     for t in np.unique(belayer_labels):
         pts_t=np.where(belayer_labels==t)[0]

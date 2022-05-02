@@ -1,5 +1,6 @@
 import numpy as np
 from glmpca import glmpca
+from utils import rotate_by_theta
 
 # INPUT:
 # Y: matrix of size G x T
@@ -210,7 +211,6 @@ def rotation_dp(data, coords, Lmax=8, rotation_angle_list=[0,5,10,15,17.5,20],
                         dp_labels[ np.where(bin_labels==s+1)[0] ] = c
                     c+=1
                 
-                print(l, losses.shape,error_mat.shape)
                 losses[ind_t,l-1] = error_mat[-1,l-1] / N
                 labels[(ind_t,l)]=dp_labels
         else:

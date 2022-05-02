@@ -11,7 +11,7 @@ def read_input_10xdirectory(indir):
     if len(file_barcodes) == 0:
         logger.error('There is no barcode.tsv file in the 10X directory.')
 
-barcodes = np.asarray(pd.read_csv(file_barcodes[0], header=None)).flatten()
+    barcodes = np.asarray(pd.read_csv(file_barcodes[0], header=None)).flatten()
     
     # read genes
     file_features = [str(x) for x in Path(indir).rglob("*features.tsv*")]
@@ -117,3 +117,11 @@ def pool_data(count, xcoords):
         map_1d_bins_to_2d[b] = bin_pts
         
     return pooled_count, pooled_xcoords, map_1d_bins_to_2d
+
+def rotate_by_theta(coords, theta, rotate_about=np.array([0,0])):
+    coordsT=coords.T
+    
+    c,s=np.cos(theta), np.sin(theta)
+    rotation_matrix=np.array(((c, -s), (s, c)))
+    
+    return (rotation_matrix @ coordsT).T
