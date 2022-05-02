@@ -7,19 +7,15 @@ from pathlib import Path
 def read_input_10xdirectory(indir):
     # read barcodes
     file_barcodes = [str(x) for x in Path(indir).rglob("*barcodes.tsv*")]
-
     if len(file_barcodes) == 0:
         logger.error('There is no barcode.tsv file in the 10X directory.')
-
-barcodes = np.asarray(pd.read_csv(file_barcodes[0], header=None)).flatten()
-    
+    barcodes = np.asarray(pd.read_csv(file_barcodes[0], header=None)).flatten()
     # read genes
     file_features = [str(x) for x in Path(indir).rglob("*features.tsv*")]
     if len(file_features) == 0:
         logger.error('There is no features.tsv file in the 10X directory.')
     genes = np.asarray(pd.read_csv(file_features[0], sep='\t', header=None))
     genes = genes[:,1]
-
     # spatial coordinate file
     file_coords = [str(x) for x in Path(indir).rglob("*tissue_positions_list.csv*")]
     if len(file_coords) == 0:
@@ -30,13 +26,11 @@ barcodes = np.asarray(pd.read_csv(file_barcodes[0], header=None)).flatten()
     coords.barcodes = pd.Categorical(coords.barcodes, categories=barcodes, ordered=True)
     coords.sort_values(by="barcodes", inplace=True)
     pos = np.array(coords.iloc[:, np.array([1,2])])
-
     # count matrix file
     file_matrix = [str(x) for x in Path(indir).rglob("*matrix.mtx*")]
     if len(file_matrix) == 0:
         logger.error('There is no matrix.mtx file in the 10X directory.')
     count = scipy.io.mmread(file_matrix[0]).toarray() # count is a gene-by-spot matrix
-
     return count, pos, barcodes, genes
 
 
