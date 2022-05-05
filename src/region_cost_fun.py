@@ -3,7 +3,7 @@ import numpy as np
 import anndata
 import scanpy as sc
 from spatialcoord import *
-from simpleharmonic import *
+from harmonic import *
 from glmpca import glmpca
 import networkx as nx
 from sklearn import linear_model,preprocessing
@@ -117,10 +117,12 @@ def fill_geometry(points, is_hexagon=True):
 '''
 Example usage of the following loss function object:
     from region_cost_fun import *
-    llf = lossfunction(count_matrix, x_coord, y_coord, total_num_cluster=5, Gamma_0=Gamma_0, Gamma_L=Gamma_L, forbidden=forbidden, platform="Visium")
+    llf = lossfunction(count_matrix, x_coord, y_coord, total_num_cluster=5, platform="Visium")
+
     ##### Evaluate loss of a region bounded by two layer boundaries #####
     # b1_i and b1_j are the index of endpoints for layer boundary 1, and b2_i and b2_j are the index of endpoints for layer boundary 2
     loss = llf.eval_loss(b1_i, b1_j, b2_i, b2_j) # this is the l2 loss of points between layer boundary 1 and layer boundary 2
+
     ##### Evaluate loss of a region bounded by one layer boundary and tissue boundary arcs #####
     # b1_i and b1_j are the index of endpoints for layer boundary 1, and bnext is the index of an arbitrary point in the region to be evaluated.
     # bnext is needed to determine which side of line b1_ib1_j is the region of interest.
@@ -128,16 +130,13 @@ Example usage of the following loss function object:
     loss = llf.eval_loss(b1_i, b1_j, other_boundary="last")
 '''
 class lossfunction(object):
-    def __init__(self, count, x, y, total_num_cluster, Gamma_0=None, Gamma_L=None, forbidden=[], consider_points=None, interpolation_type="harmonic", platform="ST"):
+    def __init__(self, count, x, y, total_num_cluster, consider_points=None, interpolation_type="harmonic", platform="ST"):
         '''
         Input:
             count: UMI count matrix of size number_genes by number_points. It includes both tissue boundary points and interior points.
             x: x coordinate vector of the points (in the same order as in count)
             y: y coordinate vectoor of the points (in the same order as in count)
             total_num_cluster: total number of layers. This parameter is needed for dimensionality reduction, and the low dimension space has 2 * total_num_cluster dimensions.
-            Gamma_0: indices of points of the tissue boundary in the 1st layer.
-            Gamma_L: indices of points of the tissue boundary in the last layer.
-            forbidden: indices of points to be ignored. Their will not be included in regression or loss evaluation. When Gamma_0 and Gamma_L are used, forbidden can be set as the points beyond Gamma_0 and Gamma_L.
             interpolation_type: either "harmonic" or "tps".
             platform: either "ST" or "Visium". This specifies the grid layout of the points, ST is a square grid layout, Visium is a hexagon layout
         '''
@@ -152,8 +151,7 @@ class lossfunction(object):
         self.interpolation_type = interpolation_type
         self.platform = platform
         spos = spatialcoord(x=self.x, y=self.y, platform=self.platform)
-        self.interpolation = simpleinterpolation(np.vstack([x,y]).T, spos.adjacency_mat, np.sqrt(spos.pairwise_squared_dist), \
-            Gamma_0=Gamma_0, Gamma_L=Gamma_L, method=self.interpolation_type)
+        self.interpolation = harmonic( np.vstack([x,y]).T, spos.adjacency_mat, np.sqrt(spos.pairwise_squared_dist) )
         # for filling up the geoometry, some points will not be in tissue, add a boolean vector to indicate which points are considered for regression.
         self.consider_points = np.array([True] * self.N)
         if not (consider_points is None):
@@ -221,71 +219,7 @@ class lossfunction(object):
             logyhat=logyhat + np.log(exposure)
         return np.sum( np.exp(logyhat) - y*logyhat )
     
-    ###############################################################
-    
-    
-    # def eval_loss_old(self, b1_i, b1_j, b2_i, b2_j=None, loss='Gaussian', pool=True):
-    #     if b2_j is None:
-    #         idx_b1, idx_b2, idx_inside = self.interpolation.get_spots_index_within_halfcircle(b1_i, b1_j, b2_i)
-    #     else:
-    #         idx_b1, idx_b2, idx_inside = self.interpolation.get_spots_index_within_region(b1_i, b1_j, b2_i, b2_j)
-    #     if len(idx_b1) == 0:
-    #         # print("The first boundary contains zero points for eval_loss({},{},{},{}).! Return -inf because it is not possible to interpolate.".format(b1_i, b1_j, b2_i, b2_j))
-    #         return np.inf
-    #     elif len(idx_b2) == 0:
-    #         # print("The second boundary contains zero points for eval_loss({},{},{},{}).! Return -inf because it is not possible to interpolate.".format(b1_i, b1_j, b2_i, b2_j))
-    #         return np.inf
-    #     proj_b1, proj_b2, proj_inside = self.interpolation.interpolate(idx_b1, idx_b2, idx_inside)
-    #     # pooling
-    #     # ????? do we need pooling at all???? or maybe pooling is wrong here?????
-    #     index = np.concatenate( [idx_b1, idx_b2, idx_inside] )
-    #     xcoords = np.round(np.concatenate( [proj_b1, proj_b2, proj_inside] ))
-    #     xcoords_int = xcoords.astype(int)
-    #     pooled_xcoords = np.sort(np.unique(xcoords_int))
-    #     N_1d = pooled_xcoords.shape[0]
-    #     pooled_int_data = np.zeros( (self.G, N_1d) )
-    #     map_1d_bins_to_2d = {}
-    #     for ind, b in enumerate(pooled_xcoords):
-    #         bin_pts = np.where(xcoords_int == b)[0]
-    #         pooled_int_data[:,ind] = np.sum(self.count[:,index[bin_pts]], axis=1)
-    #         map_1d_bins_to_2d[b] = bin_pts
-
-    #     if loss=='Gaussian':
-    #         if pool:
-    #             # glmPCA of pooled data
-    #             np.random.seed(0)
-    #             glmpca_res_1d_poisson = glmpca.glmpca(pooled_int_data, 2*self.total_num_cluster, fam="poi", penalty=100, verbose=False)
-    #             F_glmpca_1d_poisson = glmpca_res_1d_poisson['factors']
-    #             # regression
-    #             X = np.ones((N_1d, 2))
-    #             X[:,0] = pooled_xcoords
-    #             theta = np.linalg.inv(X.T @ X) @ X.T @ F_glmpca_1d_poisson
-    #             error = np.linalg.norm(X @ theta - F_glmpca_1d_poisson)**2
-    #             return error
-    #         else:
-    #             # check whether 2D glmPCA exists
-    #             if self.F_glmpca_2d_poisson is None:
-    #                 self.compute_2d_glmPCA()
-    #             # regression
-    #             X = np.ones(( len(xcoords), 2))
-    #             X[:,0] = xcoords
-    #             theta = np.linalg.inv(X.T @ X) @ X.T @ self.F_glmpca_2d_poisson[index, :]
-    #             error = np.linalg.norm(X @ theta - self.F_glmpca_2d_poisson[index, :])**2
-    #             return error
-    #     elif loss=='Poisson':
-    #         error=0
-    #         if pool:
-    #             pooled_exposures=np.sum( pooled_int_data,axis=0)
-    #             for g in range(self.G):
-    #                 error += self.opt_poisson_sklearn_singlegene(pooled_int_data[g,:] + 1, xcoords=pooled_xcoords, exposure=pooled_exposures)
-    #         else:
-    #             exposures = np.sum(self.count[:, index], axis=0)
-    #             for g in range(self.G):
-    #                 params = self.fit_poisson_singlegene(self.count[g,index] + 1, xcoords=xcoords, exposure=exposures)
-    #                 error += self.poisson_loss_singlegene(self.count[g,index] + 1, xcoords=xcoords, params=params, exposure=exposures)
-    #         return error
-    #     else:
-    #         raise Exception('Loss function not yet implemented')
+    ###############################################################  
     #
     def eval_loss(self, b1_endp1, b1_endp2, b2_endp1=None, b2_endp2=None, other_boundary=None, loss='Gaussian'):
         # find spots on the layer boundaries and inside
@@ -305,7 +239,7 @@ class lossfunction(object):
             if len(idx_b1) == 0 or len(idx_b2) == 0 or len(idx_inside) == 0:
                 return np.inf
             # interpolation
-            proj_b1, proj_b2, proj_inside = self.interpolation.interpolate(idx_b1, idx_b2, idx_inside)
+            proj_b1, proj_b2, proj_inside = self.interpolation.interpolate_two_boundaries(idx_b1, idx_b2, idx_inside)
             # regression
             index = np.concatenate( [idx_b1, idx_b2, idx_inside] )
             proj = np.concatenate( [proj_b1, proj_b2, proj_inside] )
@@ -336,4 +270,5 @@ class lossfunction(object):
             return error
         else:
             raise Exception('Loss function not yet implemented')
+            
             
