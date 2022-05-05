@@ -5,6 +5,13 @@ from pathlib import Path
 
 
 def read_input_10xdirectory(indir):
+    """Read count matrix and spatial coordinates from 10X folder.
+    :param indir: 10X output directory.
+    :type indir: str
+
+    :return: a gene-by-spot UMI count matrix, a cell-by-2 spatial coordinate matrix, an array of barcodes, an array of genes
+    :rtype: np.array, np.array, np.array, np.array
+    """
     # read barcodes
     file_barcodes = [str(x) for x in Path(indir).rglob("*barcodes.tsv*")]
     if len(file_barcodes) == 0:
