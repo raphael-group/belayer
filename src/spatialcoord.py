@@ -20,15 +20,17 @@ class spatialcoord(object):
         self.adjacency_mat = None
         ##### initialize basic information #####
         self.platform = platform
-        # adjacency type is the way to construct adjacency matrix, it is  KNN graph in general
-        # but for certain platforms if the spatial coordinate is integer valued, directly use the grid information
-        self.adjacency_type = "knn"
-        if (self.platform == "ST" or self.platform == "Visium") and np.all(x % np.round(x).astype(np.int) == 0) and np.all(y % np.round(y).astype(np.int) == 0):
-            self.adjacency_type = "grid"
         self.n_neighbors = n_neighbors
         assert( len(x) == len(y) )
         self.x = x
         self.y = y
+        # adjacency type is the way to construct adjacency matrix, it is  KNN graph in general
+        # but for certain platforms if the spatial coordinate is integer valued, directly use the grid information
+        self.adjacency_type = "knn"
+        if (self.platform == "ST" or self.platform == "Visium"):
+            self.adjacency_type = "grid"
+            self.x = np.round(x).astype(np.int)
+            self.y = np.round(y).astype(np.int)
         # for certain platforms, specify the unit distance of x^2 and y^2
         self.unit_xsquared = 1
         self.unit_ysquared = 1
@@ -80,6 +82,7 @@ class spatialcoord(object):
     def graph_laplacian(self, sigma):
         K = self.gaussian_kernel(sigma)
         L = np.diag(np.sum(K, axis=0)) - K
+        return L
     #
     def fractional_hausdorff_distance(self, point_list_A, point_list_B, percentile=100):
         dist = np.sqrt( self.pairwise_squared_dist[np.ix_( np.array(point_list_A), np.array(point_list_B) )] )

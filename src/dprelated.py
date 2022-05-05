@@ -1,7 +1,6 @@
 import numpy as np
 from glmpca import glmpca
 
-# TODO: add description!!
 def rotate_by_theta(coords, theta, rotate_about=np.array([0,0])):
     """
     Rotate coordinate array by angle theta.
@@ -315,4 +314,3 @@ def find_segments_from_dp(error_mat, segment_map, l, xcoords=None):
         seg_val=new_seg_val
     segs[0]=np.arange(0,time_val+1)
     return segs
-
