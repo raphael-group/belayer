@@ -89,6 +89,7 @@ class precompute_class(object):
         logger.info("There are {} triples of boundary end points for half circle regions.".format(len(boundary_triples)))
 
         # class attribute
+        self.in_tissue = in_tissue
         self.llf = llf
         self.sorted_boundary = sorted_boundary
         self.boundary_tuples = boundary_tuples

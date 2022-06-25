@@ -145,7 +145,7 @@ def dp_outer(points, p, func, disable_tqdm=False):
     return overall_min, overall_lines
 
 
-def run_dp_linear_boundary(FOLDER_TO_SAVE_LOSSES_IN, sorted_boundary, max_nlayers, FOLDER_TO_SAVE_DP):
+def run_dp_linear_boundary(FOLDER_TO_SAVE_LOSSES_IN, sorted_boundary, max_nlayers, PREFIX_TO_SAVE_DP):
     """Wrapper to run DP with linear layer boundaries using pre-computed loss (likelihood) values.
 
     :param FOLDER_TO_SAVE_LOSSES_IN: prefix of pre-computed likelihood pickle filename, the input to precompute_class
@@ -154,8 +154,8 @@ def run_dp_linear_boundary(FOLDER_TO_SAVE_LOSSES_IN, sorted_boundary, max_nlayer
     :type sorted_boundary: list of pairs
     :param max_nlayers: maximum number of layers
     :type max_nlayers: int
-    :param FOLDER_TO_SAVE_DP: output folder to save the optimal DP likelihood objective and corresponding layer boundary lines for number of layers from 1 to max_nlayers
-    :type FOLDER_TO_SAVE_DP: str
+    :param PREFIX_TO_SAVE_DP: output folder to save the optimal DP likelihood objective and corresponding layer boundary lines for number of layers from 1 to max_nlayers
+    :type PREFIX_TO_SAVE_DP: str
 
     :return: A pair of optimal DP objective function values and corresponding layer boundaries. Note that for any of number layers <= max_nlayers, the optimal solution can be retrieved from the DP table and will be saved and returned.
     :rtype: (np.array, np.array)
@@ -174,7 +174,7 @@ def run_dp_linear_boundary(FOLDER_TO_SAVE_LOSSES_IN, sorted_boundary, max_nlayer
 
     # for number of layers from 1 to max_layers, find best layer boundaries
     for num_layers in range(1, max_nlayers + 1):
-        res = find_first_layer(dp_mat, len(sorted_boundary), max_nlayers)
+        res = find_first_layer(dp_mat, len(sorted_boundary), num_layers)
         loss, layers = res
         
         # order layer boundaries using func above
@@ -189,7 +189,7 @@ def run_dp_linear_boundary(FOLDER_TO_SAVE_LOSSES_IN, sorted_boundary, max_nlayer
     arr_loss_np = np.asarray(arr_loss, dtype=object)
     arr_layers_np = np.asarray(arr_layers, dtype=object)
 
-    np.save(f'{FOLDER_TO_SAVE_DP}/non_init_loss.npy', arr_loss_np, allow_pickle=True, fix_imports=True)
-    np.save(f'{FOLDER_TO_SAVE_DP}/non_init_layers.npy', arr_layers_np, allow_pickle=True, fix_imports=True)
+    np.save(f'{PREFIX_TO_SAVE_DP}_dp_loss.npy', arr_loss_np, allow_pickle=True, fix_imports=True)
+    np.save(f'{PREFIX_TO_SAVE_DP}_dp_layers.npy', arr_layers_np, allow_pickle=True, fix_imports=True)
 
     return arr_loss_np, arr_layers_np

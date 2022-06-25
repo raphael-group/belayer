@@ -462,3 +462,43 @@ class harmonic(object):
                 heat_offset += np.max(np.concatenate([heats_b1, heats_b2, heats_inside]))
         logger.info("Finish computing harmonic interpolation.")
         return heats, list_boundary, current_labels
+
+
+def get_depth_from_linear_boundaries(harmo, dp_boundaries, in_tissue):
+    ##### harmonic interpolation for each layer #####
+    interpolation = np.ones(harmo.coords.shape[0]) * np.nan
+    dp_labels = np.ones(harmo.coords.shape[0]) * np.nan
+    shift = 0
+    for i in range(len(dp_boundaries) + 1):
+        if i > 0 and i < len(dp_boundaries):
+            b1_endp1 = dp_boundaries[i-1][0]
+            b1_endp2 = dp_boundaries[i-1][1]
+            b2_endp1 = dp_boundaries[i][0]
+            b2_endp2 = dp_boundaries[i][1]
+            # get indices of points bounded by the two lines
+            idx_b1, idx_b2, idx_inside = harmo.get_spots_index_within_region(b1_endp1, b1_endp2, b2_endp1, b2_endp2)
+            # harmonic interpolation
+            proj_b1, proj_b2, proj_inside = harmo.interpolate_two_boundaries(idx_b1, idx_b2, idx_inside)
+            # concatenate indices and interpolation
+            index = np.concatenate([idx_b1,idx_b2,idx_inside])
+            proj = np.concatenate([proj_b1, proj_b2, proj_inside])
+        else:
+            b1_endp1 = dp_boundaries[i][0] if i == 0 else dp_boundaries[i-1][0]
+            b1_endp2 = dp_boundaries[i][1] if i == 0 else dp_boundaries[i-1][1]
+            # manually set b2_endp1 to indicate which side of half circle to perform diffusion, but it should be consistent for all 4 slices
+            b2_endp1 = (0,126) if i == 0 else (77, 1)
+            # get indices of points in half circle
+            idx_b1, idx_inside = harmo.get_spots_index_within_halfcircle(b1_endp1, b1_endp2, b2_endp1)
+            # diffusion
+            proj_b1, proj_inside = harmo.diffusion_harmonic(idx_b1, idx_inside)
+            index = np.concatenate( [idx_b1, idx_inside] )
+            proj = np.concatenate( [proj_b1, proj_inside] )
+            if i == len(dp_boundaries):
+                proj = np.max(proj) - proj
+        # add a shift to the harmonic interpolation so that they are larger than the previous layer
+        interpolation[ index ] = shift + proj
+        dp_labels[index] = i
+        shift += np.max(proj)
+    interpolation = interpolation[in_tissue]
+    dp_labels = dp_labels[in_tissue]
+    return interpolation, dp_labels
