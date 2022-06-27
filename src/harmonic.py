@@ -485,8 +485,17 @@ def get_depth_from_linear_boundaries(harmo, dp_boundaries, in_tissue):
         else:
             b1_endp1 = dp_boundaries[i][0] if i == 0 else dp_boundaries[i-1][0]
             b1_endp2 = dp_boundaries[i][1] if i == 0 else dp_boundaries[i-1][1]
-            # manually set b2_endp1 to indicate which side of half circle to perform diffusion, but it should be consistent for all 4 slices
-            b2_endp1 = (0,126) if i == 0 else (77, 1)
+            # set b2_endp1 to indicate which side of half circle to perform diffusion
+            if len(dp_boundaries) == 1:
+                side, signed_distance = get_signed_distance(harmo.coords, b1_endp1, b1_endp2, (0,0))
+                b2_endp1 = harmo.coords[ np.argmin(signed_distance) ] if i == 0 else harmo.coords[ np.argmax(signed_distance) ]
+            else:
+                if i == 0:
+                    side, signed_distance = get_signed_distance(harmo.coords, b1_endp1, b1_endp2, dp_boundaries[i+1][0])
+                    b2_endp1 = harmo.coords[ np.argmin(signed_distance) if side else np.argmax(signed_distance) ]
+                else:
+                    side, signed_distance = get_signed_distance(harmo.coords, b1_endp1, b1_endp2, dp_boundaries[i-2][0])
+                    b2_endp1 = harmo.coords[ np.argmin(signed_distance) if side else np.argmax(signed_distance) ]
             # get indices of points in half circle
             idx_b1, idx_inside = harmo.get_spots_index_within_halfcircle(b1_endp1, b1_endp2, b2_endp1)
             # diffusion
