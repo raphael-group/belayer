@@ -81,7 +81,9 @@ def visualized_rotated_belayer_output(labels, coords, best_L, best_angle, rotati
 
     return belayer_labels, coords_rotated
 
-def plot_cluster_output(belayer_labels, coords):
+def plot_cluster_output(belayer_labels, coords, legend=False):
     for t in np.unique(belayer_labels):
         pts_t=np.where(belayer_labels==t)[0]
-        plt.scatter(coords[pts_t,0],coords[pts_t,1],s=10)
+        plt.scatter(coords[pts_t,0],coords[pts_t,1],s=10, label=t)
+    if legend:
+        plt.legend()
