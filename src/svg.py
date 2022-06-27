@@ -4,33 +4,40 @@ import pickle
 import statsmodels
 import statsmodels.api as sm
 
+from sklearn import linear_model,preprocessing
+from scipy.stats import mode
+import matplotlib.pyplot as plt
 
-def select_commonly_expressed_genes(count, depth, q=0.75, threshold=10, num_pools=None):
-    """Select commonly expressed genes for fitting expression function per layer. A gene is selected if it is expressed >= threshold UMI in at least q percentage of pooled spots.
+
+def select_commonly_expressed_genes(count, q=0.75, threshold=10, pooling=False, depth=None, num_pools=None):
+    """Select commonly expressed genes for fitting expression function per layer. A gene is selected if it is expressed >= threshold UMI in at least q percentage of (pooled) spots.
     :param count: UMI count matrix of SRT gene expression, G genes by n spots
     :type count: np.array
-    :param depth: Inferred layer depth, vector of n spots
-    :type depth: np.array
     :param q: Quantile for gene selection.
     :type q: float
+    :param pooling: whether thresholding based on UMI in original spots or pooled spots
+    :type pooling: boolean
+    :param depth: Inferred layer depth, vector of n spots (optional, only needed if pooling=True)
+    :type depth: np.array
     :return: An array of indices of selected genes.
     :rtype: np.array
     """
     G = count.shape[0]
-    if num_pools is None:
-        num_pools = int(np.sum(count) / 1e5)
-    depth_bounds_in_pool = np.linspace(np.min(depth), np.max(depth), num_pools)
-    depth_bounds_in_pool[-1] += 1
-    pooled_int_data = np.zeros((G, num_pools))
-    for i in range(len(depth_bounds_in_pool)-1):
-        idx_spots = np.where(np.logical_and(depth >= depth_bounds_in_pool[i], depth < depth_bounds_in_pool[i+1]))[0]
-        pooled_int_data[:,i] = np.sum(count[:, idx_spots], axis=1)
-    quantiles = np.quantile(pooled_int_data, q, axis=1)
-    selection = np.where(quantiles >= threshold)[0]
-    return selection
+    if not pooling:
+        quantiles = np.quantile(count.T, q, axis=0)
+        selection = np.where(quantiles > threshold)[0]
+        return selection
 
 
-def segmented_poisson_regression(count, totalumi, dp_labels, depth):
+
+def poisson_regression(y, xcoords=None, exposure=None, alpha=0):
+    # run poisson fit on pooled data and return slope, intercept
+    clf = linear_model.PoissonRegressor(fit_intercept=True,alpha=alpha,max_iter=500,tol=1e-10)
+    clf.fit(np.reshape(xcoords,(-1,1)),y/exposure, sample_weight=exposure)
+
+    return [clf.coef_[0], clf.intercept_ ]
+
+def segmented_poisson_regression(count, totalumi, dp_labels, depth, opt_function=poisson_regression, alpha=0):
     """ Fit Poisson regression per gene per layer.
     :param count: UMI count matrix of SRT gene expression, G genes by n spots
     :type count: np.array
@@ -43,24 +50,90 @@ def segmented_poisson_regression(count, totalumi, dp_labels, depth):
     :return: A dataframe for the offset and slope of piecewise linear expression function, size of G genes by 2*L layers.
     :rtype: pd.DataFrame
     """
-    G = count.shape[0]
+    
+    G, N = count.shape
     unique_layers = np.sort(np.unique(dp_labels))
     L = len(unique_layers)
-    # return matrices initialization
-    offset = np.zeros((G, L))
-    slope = np.zeros((G, L))
-    # Poisson regression
+    
+    slope_matrix=np.zeros((G,L))
+    intercept_matrix=np.zeros((G,L))
+    
     for g in range(G):
-        for l,layername in enumerate(unique_layers):
-            idx_spots = np.where(dp_labels == layername)[0]
-            if np.sum(count[g,idx_spots] > 0) < 2:
-                continue
-            X = np.vstack([ np.ones(len(idx_spots)), depth[idx_spots] ]).T
-            res = statsmodels.discrete.discrete_model.Poisson(count[g,idx_spots], X, exposure=totalumi[idx_spots]).fit(disp=0, maxiter=100)
-            offset[g, l] = res.params[0]
-            slope[g, l] = res.params[1]
+        for t in np.arange(L):
+            pts_t=np.where(dp_labels==t)[0]
+                
+            slope, intercept = opt_function(count[g,pts_t], xcoords=depth[pts_t], exposure=totalumi[pts_t], alpha=alpha)
+            
+            slope_matrix[g,t]=slope
+            intercept_matrix[g,t]=intercept
+    
     combined_params = np.zeros((G, 2*L))
-    combined_params[:, np.arange(0, 2*L, 2)] = offset
-    combined_params[:, np.arange(1, 2*L, 2)] = slope
+    combined_params[:, np.arange(0, 2*L, 2)] = intercept_matrix
+    combined_params[:, np.arange(1, 2*L, 2)] = slope_matrix
+    
     df_gene_func = pd.DataFrame(combined_params, columns=sum([[f"intercept {layer}", f"slope {layer}"] for layer in unique_layers], []))
     return df_gene_func
+
+# BINNING
+def bin_data(count, dp_labels, depth):
+    exposure=np.sum(count,axis=0) # total UMI per spot
+    G,N=count.shape
+    
+    # BINNING
+    binned_depths=np.round(depth) # each bin is centered at an integer
+    unique_binned_depths=np.unique(binned_depths)
+
+    N_1d=len(unique_binned_depths)
+    binned_count=np.zeros( (G, N_1d) )
+    binned_exposure=np.zeros( N_1d )
+    binned_labels=np.zeros(N_1d)
+
+    map_1d_bins_to_2d={} # map b -> [list of cells in bin b]
+    for ind, b in enumerate(unique_binned_depths):
+        bin_pts=np.where(binned_depths==b)[0]
+
+        binned_count[:,ind]=np.sum(count[:,bin_pts],axis=1)
+        binned_exposure[ind]=np.sum(exposure[bin_pts])
+        binned_labels[ind]= int(mode( dp_labels[bin_pts] ).mode[0])
+        
+        map_1d_bins_to_2d[b]=bin_pts
+
+    L=len(np.unique(dp_labels))
+    segs=[np.where(binned_labels==i)[0] for i in range(L)]
+    
+    to_return={}
+    to_return['binned_depths']=binned_depths
+    to_return['unique_binned_depths']=unique_binned_depths
+    to_return['binned_count']=binned_count
+    to_return['binned_exposure']=binned_exposure
+    to_return['binned_labels']=binned_labels
+    to_return['map_1d_bins_to_2d']=map_1d_bins_to_2d
+    to_return['segs']=segs
+    
+    return to_return
+
+# VISUALIZATION
+def plot_gene_pwlinear(gene_index, idx_kept, count, slope_offsets, depth, binning_output):
+    gene_index_idx_kept=np.where(idx_kept==gene_index)[0][0]
+    slope_offsets_g=slope_offsets.iloc[gene_index_idx_kept]
+    
+    unique_binned_depths=binning_output['unique_binned_depths']
+    binned_labels=binning_output['binned_labels']
+    
+    binned_count=binning_output['binned_count']
+    binned_exposure=binning_output['binned_exposure']
+    
+    segs=binning_output['segs']
+    L=len(segs)
+
+    fig,ax=plt.subplots(figsize=(7,3))
+
+    for seg in range(L):
+        pts_seg=np.where(binned_labels==seg)[0]
+        plt.scatter(unique_binned_depths[pts_seg], 
+                   np.log( (binned_count[gene_index,pts_seg]) / binned_exposure[pts_seg] ))
+        
+        slope=slope_offsets.iloc[gene_index_idx_kept][f'slope {float(seg)}']
+        offset=slope_offsets.iloc[gene_index_idx_kept][f'intercept {float(seg)}']
+
+        plt.plot( unique_binned_depths[pts_seg], offset + slope*unique_binned_depths[pts_seg], color='grey', alpha=1 )

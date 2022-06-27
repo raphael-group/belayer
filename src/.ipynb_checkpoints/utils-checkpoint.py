@@ -4,36 +4,6 @@ import scipy.io
 from pathlib import Path
 
 
-def read_input_10xdirectory(indir):
-    # read barcodes
-    file_barcodes = [str(x) for x in Path(indir).rglob("*barcodes.tsv*")]
-    if len(file_barcodes) == 0:
-        logger.error('There is no barcode.tsv file in the 10X directory.')
-    barcodes = np.asarray(pd.read_csv(file_barcodes[0], header=None)).flatten()
-    # read genes
-    file_features = [str(x) for x in Path(indir).rglob("*features.tsv*")]
-    if len(file_features) == 0:
-        logger.error('There is no features.tsv file in the 10X directory.')
-    genes = np.asarray(pd.read_csv(file_features[0], sep='\t', header=None))
-    genes = genes[:,1]
-    # spatial coordinate file
-    file_coords = [str(x) for x in Path(indir).rglob("*tissue_positions_list.csv*")]
-    if len(file_coords) == 0:
-        logger.error('There is no tissue_positions_list.csv file in the 10X directory.')
-    coords = pd.read_csv(file_coords[0], sep=',', header=None)
-    coords.columns = ["barcodes", "intissue", "x", "y", "image x", "image y"]
-    coords = coords[coords.intissue == 1].iloc[:, np.array([0,2,3])] # in-tissue spots
-    coords.barcodes = pd.Categorical(coords.barcodes, categories=barcodes, ordered=True)
-    coords.sort_values(by="barcodes", inplace=True)
-    pos = np.array(coords.iloc[:, np.array([1,2])])
-    # count matrix file
-    file_matrix = [str(x) for x in Path(indir).rglob("*matrix.mtx*")]
-    if len(file_matrix) == 0:
-        logger.error('There is no matrix.mtx file in the 10X directory.')
-    count = scipy.io.mmread(file_matrix[0]).toarray() # count is a gene-by-spot matrix
-    return count, pos, barcodes, genes
-
-
 def read_input_st_files(stfiles):
     # count matrix file: assume it is a gene-by-spot matrix
     # check the existence of header, check delimiter of count file
@@ -111,3 +81,12 @@ def pool_data(count, xcoords):
         map_1d_bins_to_2d[b] = bin_pts
         
     return pooled_count, pooled_xcoords, map_1d_bins_to_2d
+
+def rotate_by_theta(coords, theta, rotate_about=np.array([0,0])):
+    coordsT=coords.T
+    
+    c,s=np.cos(theta), np.sin(theta)
+    rotation_matrix=np.array(((c, -s), (s, c)))
+    
+    return (rotation_matrix @ coordsT).T
+

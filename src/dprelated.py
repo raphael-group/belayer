@@ -16,6 +16,7 @@ def rotate_by_theta(coords, theta, rotate_about=np.array([0,0])):
     rotation_matrix=np.array(((c, -s), (s, c)))
     
     return (rotation_matrix @ coordsT).T
+    
 
 def opt_linear(y, xcoords):
     """
@@ -43,18 +44,6 @@ def opt_linear(y, xcoords):
         placeholder=np.ones((2,g))-2
         return placeholder, np.Inf
     
-# INPUT (TODO: UPDATE)
-# data: array of size G x T
-# L: number of pieces
-# xcoords: size T
-# opt_function: how to fit each row of data (eg linear, Poisson)
-# min_seg_size: minimum segment size
-
-# OUTPUT:
-# (1) error_mat: DP table of size T x L
-# where error_mat[t,l] = error from using linreg to fit first t+1 times using (l+1)-piece segmented regression
-# (2) segment_map: pointers for DP table
-# (t,l) -> (t', l-1) where you use l-1 pieces for times 1,...,t' and one piece for t'+1,...,t
 def dp_raw(data, Lmax, xcoords, opt_function=opt_linear):
     """
     Dynamic programming algorithm for segmented regression
@@ -123,18 +112,7 @@ def dp_raw(data, Lmax, xcoords, opt_function=opt_linear):
 
     return error_mat, segment_map
 
-# INPUT (TODO: UPDATE)
-# data: array of size G x T
-# L: number of pieces
-# xcoords: size T
-# opt_function: how to fit each row of data (eg linear, Poisson)
-# min_seg_size: minimum piece size
 
-# OUTPUT:
-# (1) error_mat: DP table of size T x L
-# where error_mat[t,l] = error from using linreg to fit first t+1 times using (l+1)-piece segmented regression
-# (2) segment_map: pointers for DP table
-# (t,l) -> (t', l-1) where you use l-1 pieces for times 1,...,t' and one piece for t'+1,...,t
 def dp_bucketized(data, bucket_endpoints, Lmax, xcoords, opt_function=opt_linear):
     """
     Dynamic programming algorithm for segmented regression
@@ -210,6 +188,31 @@ def dp_bucketized(data, bucket_endpoints, Lmax, xcoords, opt_function=opt_linear
     return error_mat, segment_map
 
 
+def dp(data, depth, Lmax, use_buckets=True, num_buckets=150, opt_function=opt_linear):
+    G, N = data.shape
+    
+    if use_buckets:
+        bin_endpoints=np.linspace(np.min(depth),np.max(depth)+0.01,num_buckets+1)
+        print('running DP with buckets')
+        error_mat,seg_map=dp_bucketized(data, bin_endpoints, Lmax, 
+                                        depth, opt_function=opt_linear)
+
+        # get labels, save to res
+        losses,labels=get_losses_labels(error_mat,seg_map, depth, 
+                                            use_buckets=True, 
+                                            bin_endpoints=bin_endpoints)
+        return losses, labels
+
+    else:
+        print('running DP without buckets')
+        error_mat, seg_map = dp_raw(data, Lmax, depth)
+
+        # get labels, save to res
+        losses,labels=get_losses_labels(error_mat,seg_map, depth, use_buckets=False)
+        return losses, labels
+    
+
+
 def rotation_dp(data, coords, Lmax=8, rotation_angle_list=[0,5,10,15,17.5,20], 
                 use_buckets=True, num_buckets=150, opt_function=opt_linear):
     """
@@ -227,10 +230,10 @@ def rotation_dp(data, coords, Lmax=8, rotation_angle_list=[0,5,10,15,17.5,20],
                         x-coordinate range into
     :param opt_function: function to fit each segment (default is least squares for linear regression)
 
-    :return: (1) losses: np.array of shape (number of rotation angles, Lmax)
+    :return: (1) loss_array: np.array of shape (number of rotation angles, Lmax)
             where losses[a,l] = DP loss from running segmented regression with l pieces
             on tissue rotated by angle rotation_angle_list[a]
-            (2) labels: dict where [a,l] -> DP labels  from running segmented regression 
+            (2) label_dict: dict where [a,l] -> DP labels  from running segmented regression 
             with l pieces on tissue rotated by angle rotation_angle_list[a]
     """
     G = data.shape[0]
@@ -249,40 +252,42 @@ def rotation_dp(data, coords, Lmax=8, rotation_angle_list=[0,5,10,15,17.5,20],
         xcoords_rotated=coords_rotated[:,0]
         if use_buckets:
             bin_endpoints=np.linspace(np.min(xcoords_rotated),np.max(xcoords_rotated)+0.01,num_buckets+1)
-            print('running DP')
+            print('running DP with buckets')
             error_mat,seg_map=dp_bucketized(data, bin_endpoints, Lmax, 
                                             xcoords_rotated, opt_function=opt_linear)
 
             # get labels, save to res
+            losses_t,labels_t=get_losses_labels(error_mat,seg_map, xcoords_rotated, 
+                                                use_buckets=True, 
+                                                bin_endpoints=bin_endpoints)
+            
+            losses[ind_t,:]=losses_t
             for l in range(1,Lmax+1):
-                print('finding segments for {} layers'.format(l))
-                bin_labels=np.digitize(xcoords_rotated,bin_endpoints)
-                segs=find_segments_from_dp(error_mat, seg_map, l)
-                dp_labels=np.zeros(N)
-                c=0
-                for seg in segs:
-                    for s in seg:
-                        dp_labels[ np.where(bin_labels==s+1)[0] ] = c
-                    c+=1
-                
-                losses[ind_t,l-1] = error_mat[-1,l-1] / N
-                labels[(ind_t,l)]=dp_labels
+                labels[(ind_t,l)]=labels_t[l]
+            
         else:
             print('running DP without buckets')
             error_mat, seg_map = dp_raw(data, Lmax, xcoords_rotated)
             
             # get labels, save to res
+            losses_t,labels_t=get_losses_labels(error_mat,seg_map, xcoords_rotated, use_buckets=False)
+            
+            losses[ind_t,:]=losses_t
             for l in range(1,Lmax+1):
-                print('finding segments for {} layers'.format(l))
-                segs=find_segments_from_dp(error_mat, seg_map, l, xcoords=xcoords_rotated)
-                dp_labels=np.zeros(N)
-                c=0
-                for seg in segs:
-                    dp_labels[seg]=c
-                    c+=1
+                labels[(ind_t,l)]=labels_t[l]
+            
+            
+#             for l in range(1,Lmax+1):
+#                 print('finding segments for {} layers'.format(l))
+#                 segs=find_segments_from_dp(error_mat, seg_map, l, xcoords=xcoords_rotated)
+#                 dp_labels=np.zeros(N)
+#                 c=0
+#                 for seg in segs:
+#                     dp_labels[seg]=c
+#                     c+=1
                 
-                losses[ind_t,l-1] = error_mat[-1,l-1] / N
-                labels[(ind_t,l)]=dp_labels
+#                 losses[ind_t,l-1] = error_mat[-1,l-1] / N
+#                 labels[(ind_t,l)]=dp_labels
     return losses,labels
 
 def find_segments_from_dp(error_mat, segment_map, l, xcoords=None):
@@ -314,3 +319,43 @@ def find_segments_from_dp(error_mat, segment_map, l, xcoords=None):
         seg_val=new_seg_val
     segs[0]=np.arange(0,time_val+1)
     return segs
+
+# output:
+# losses: 
+def get_losses_labels(error_mat,seg_map, depth, use_buckets=False, bin_endpoints=None):
+    Lmax=error_mat.shape[1]
+    N=len(depth)
+    
+    losses=np.zeros( Lmax )
+    labels={}
+    
+    # get labels, save to res
+    if use_buckets:
+        for l in range(1,Lmax+1):
+            print('finding segments for {} layers'.format(l))
+            
+            bin_labels=np.digitize(depth,bin_endpoints) - 1
+            segs=find_segments_from_dp(error_mat, seg_map, l)
+            dp_labels=np.zeros(N)
+            c=0
+            for seg in segs:
+                for s in seg:
+                    dp_labels[ np.where(bin_labels==s+1)[0] ] = c
+                c+=1
+
+            losses[l-1] = error_mat[-1,l-1] / N
+            labels[l]=dp_labels
+    else:
+        for l in range(1,Lmax+1):
+            print('finding segments for {} layers'.format(l))
+            
+            segs=find_segments_from_dp(error_mat, seg_map, l, xcoords=depth)
+            dp_labels=np.zeros(N)
+            c=0
+            for seg in segs:
+                dp_labels[seg]=c
+                c+=1
+
+            losses[l-1] = error_mat[-1,l-1] / N
+            labels[l]=dp_labels
+    return losses, labels
