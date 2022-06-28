@@ -142,8 +142,11 @@ class precompute_class(object):
 
     def combine_precomputed_likelihoods(self):
         assert not (self.num_batches is None)
-        pre_saving = {}
+        pre_saving = None
         for batch_id in range(self.num_batches):
-            tmp = pickle.load(f"{self.FOLDER_TO_SAVE_LOSSES_IN}_pre_saving_{batch_id}_{self.num_batches}.pkl")
-            pre_saving = pre_saving.update(tmp)
+            tmp = pickle.load( open(f"{self.FOLDER_TO_SAVE_LOSSES_IN}_pre_saving_{batch_id}_{self.num_batches}.pkl", 'rb') )
+            if pre_saving is None:
+                pre_saving = tmp
+            else:
+                pre_saving = pre_saving.update(tmp)
         pickle.dump(pre_saving, open(f"{self.FOLDER_TO_SAVE_LOSSES_IN}_pre_saving.pkl", 'wb'))
