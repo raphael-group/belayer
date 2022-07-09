@@ -1,10 +1,14 @@
 # Belayer
 
-An algorithm for modeling layered tissues. Work in progress!
+Belayer: Modeling discrete and continuous spatial variation in gene expression from spatially resolved transcriptomics.
+Cong Ma\*, Uthsav Chitra\*, Shirley Zhang, Ben Raphael
 
 ## Installation
 Belayer depends on the following python packages: numpy, scipy, pandas, sklearn, [networkx](https://github.com/networkx/networkx), [glmpca](https://github.com/willtownes/glmpca-py).
 Further installation TBD.
+
+## Tutorial
+See `tutorial.ipynb` for a complete tutorial of how to run Belayer on three different datasets. Note that the tutorial requires downloading two files from [here](https://drive.google.com/drive/folders/150OZEl5Np2rgvSJm4E8QCCtIOjJkZ39N?usp=sharing) - one file for the DLPFC tutorial and one for the mouse wound tutorial - and placing them in their respective folders.
 
 ## Usage
 ```
@@ -26,6 +30,6 @@ Argument | Data type | Description
 
 ## Output
 + \<outprefix>_layer.csv. This file contains the identified layers for each spot.
-+ estimated piecewise function coefficients file TBD.
++ estimated piecewise function coefficients file TBD, see tutorial for details.
 
 ## Example
