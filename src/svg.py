@@ -74,6 +74,42 @@ def segmented_poisson_regression(count, totalumi, dp_labels, depth, opt_function
     df_gene_func = pd.DataFrame(combined_params, columns=sum([[f"intercept {layer}", f"slope {layer}"] for layer in unique_layers], []))
     return df_gene_func
 
+
+# DISCONTINUITY
+def compute_discontinuity(df_gene_func, dp_labels, depth):
+    """ Compute discontinuity of expression function under Poisson regression between each pair of adjacent layers.
+    :param df_gene_func: A dataframe for the offset and slope of piecewise linear expression function, size of G genes by 2*L layers.
+    :type df_gene_func: pd.DataFrame
+    :param dp_labels: Layer labels obtained by DP, a vector of n spots.
+    :type dp_labels: np.array
+    :param depth: Inferred layer depth, vector of n spots
+    :type depth: np.array
+    :return: A dataframe for the discontinuity of gene expression function between each pair of adjacent layers, size of G genes by L-1 layer-pairs.
+    :rtype: pd.DataFrame
+    """
+    G = df_gene_func.shape[0]
+    unique_layers = np.sort(np.unique(dp_labels))
+    L = len(unique_layers)
+
+    discontinuity = np.zeros((G,L-1))
+
+    for g in range(G):
+        for t in np.arange(1, L):
+            # discontinuity/difference between layer t-1 and layer t
+            depth_t_1=depth[np.where(dp_labels==t-1)[0]]
+            depth_t=depth[np.where(dp_labels==t)[0]]
+            # breakpoint
+            mid_depth = (np.max(depth_t_1) + np.min(depth_t)) / 2 if depth_t_1[0] < depth_t[0] else (np.max(depth_t) + np.min(depth_t_1)) / 2
+            # evaluate expression function of layer t-1 at breakpoint
+            val_t_1 = df_gene_func.iloc[g, 2*(t-1)] + df_gene_func.iloc[g, 2*(t-1) + 1] * mid_depth
+            # evaluate expression function of layer t at breakpoint
+            val_t = df_gene_func.iloc[g, 2*(t)] + df_gene_func.iloc[g, 2*(t) + 1] * mid_depth
+            discontinuity[g, t-1] = val_t - val_t_1
+
+    discontinuity = pd.DataFrame(discontinuity, columns=[f"discontinuity between {t-1} and {t}" for t in range(1,L)])
+    return discontinuity
+
+
 # BINNING
 def bin_data(count, dp_labels, depth):
     exposure=np.sum(count,axis=0) # total UMI per spot
