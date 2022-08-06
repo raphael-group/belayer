@@ -1,1 +1,5 @@
 dlpfc_example/sample_151508.h5ad
+_dp_layers.npy
+_dp_loss.npy
+_pre_saving.pkl
+.ipynb_checkpoints
