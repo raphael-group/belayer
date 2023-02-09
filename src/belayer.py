@@ -15,6 +15,10 @@ from utils_IO import *
 from harmonic import *
 from region_cost_fun import *
 from dprelated import *
+from svg import *
+from general_helper_funcs import *
+from dp_linear_boundary import *
+
 
 ##############################
 # PARSING ARGUMENTS
@@ -110,10 +114,27 @@ if __name__ == "__main__":
 
     # ROTATED
     elif args.mode == 'R':
-        angle, xcoords = find_rotation_angle(count, pos, args.nlayers)
+        rotation_angle_list = np.arange(0, 91, 5)
+        loss_array,label_dict = rotation_dp(glmpca_res_2d_poisson.T, coords, Lmax=args.nlayers, use_buckets=True, 
+                          num_buckets=150, rotation_angle_list=rotation_angle_list)
+        idx_angle = np.argmin(loss_array[:,-1])
+        angle = rotation_angle_list[idx_angle]
+        dp_labels = label_dict[(idx_angle, args.nlayers)].astype(int)
         logger.info("ESTIMATED ROTATION ANGLE={}".format(angle))
-        pooled_int_data, pooled_xcoords,  map_1d_bins_to_2d = pool_data(count, xcoords)
-        layer_pooled, layer_2d = dp(pooled_int_data, pooled_xcoords, args.nlayers, map_1d_bins_to_2d)
+        # output layer information
+        rotated_coords = rotate_by_theta(coords, angle*np.pi/180)
+        df_dp_labels = pd.DataFrame({"rotated_x":rotated_coords[:,0], "rotated_y":rotated_coords[:,1], "layer":dp_labels })
+        df_dp_labels.to_csv(args.outprefix + "_layers.txt", sep="\t")
+        ##### fitting expression function per gene ##### 
+        idx_kept = select_commonly_expressed_genes(count, q=0.85, threshold=0)
+        logger.info("number of kept genes = {}".format(len(idx_kept)))
+        slope_offsets = segmented_poisson_regression(count[idx_kept,:], 
+                                               np.sum(count,axis=0), 
+                                               dp_labels, 
+                                               rotated_coords[:,0])
+        slope_offsets.index = genes[idx_kept]
+        # output per-gene regression parameter
+        slope_offsets.to_csv(args.outprefix + "_function_coefficients.txt", sep="\t")
 
     # SUPERVISED
     elif args.mode == 'A':
@@ -141,7 +162,7 @@ if __name__ == "__main__":
         df_dp_labels = pd.DataFrame({"depth":interpolation, "layer":dp_labels}, index=barcodes)
         df_dp_labels.to_csv(args.outprefix + "_layers.txt", sep="\t")
         ##### fitting expression function per gene ##### 
-        selected_genes = select_commonly_expressed_genes(count, interpolation, q=0.75)
+        selected_genes = select_commonly_expressed_genes(count, q=0.85, threshold=0)
         totalumi = np.sum(count, axis=0)
         df_gene_func = segmented_poisson_regression(count[selected_genes,:], totalumi, dp_labels, interpolation)
         df_gene_func.index = genes[selected_genes]

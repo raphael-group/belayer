@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 import scipy.io
 from pathlib import Path
+import logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+logger = logging.getLogger()
 
 
 def read_input_10xdirectory(indir):
@@ -47,6 +50,68 @@ def read_input_10xdirectory(indir):
     return count, coords, barcodes, genes
 
 
+def determine_header(df):
+    has_header = None
+    try:
+        _ = df.iloc[0,1:].values.astype(int)
+    except:
+        has_header = 0
+    has_index_col = None
+    try:
+        _ = df.iloc[1:,0].values.astype(int)
+    except:
+        has_index_col = 0
+    return has_header, has_index_col
+
+
+def read_input_st_files(stfiles):
+    # count matrix file: assume it is a gene-by-spot matrix
+    # check the existence of header, check delimiter of count file
+    count = pd.read_csv(stfiles[0], sep=",", header=None, index_col=None, low_memory=False)
+    if count.shape[1] == 1:
+        count = pd.read_csv(stfiles[0], sep="\t", header=None, index_col=None)
+        if count.shape[1] == 1:
+            logger.error("Unknown delimiter for file {}".format(stfiles[0]))
+        else:
+            delim = "\t"
+            has_header, has_index_col = determine_header(count)
+    else:
+        delim = ","
+        has_header, has_index_col = determine_header(count)
+    count = pd.read_csv(stfiles[0], sep=delim, header=has_header, index_col=has_index_col)
+    has_index = None
+    try:
+        tmp = count.iloc[:,0].astype(int)
+        if np.all(tmp == np.arange(len(tmp))):
+            has_index = 0
+    except:
+        has_index = 0
+    if has_index:
+        count.index = count[:,0]
+        count = count.iloc[:,1:].astype(int)
+    # spatial position file
+    with open(stfiles[1], 'r') as fp:
+        line = fp.readline().strip()
+        if len(line.split(",")) > 1:
+            delim = ","
+        elif len(line.split("\t")) > 1:
+            delim = "\t"
+        else:
+            logger.error("Unknown delimiter for file {}".format(stfiles[0]))
+        has_header = None
+        strs = np.array(line.split(delim))
+        try:
+            strs = strs[1:].astype(int)
+        except:
+            has_header = 0
+    pos = pd.read_csv(stfiles[1], sep=delim, header=has_header)
+    if pos.shape[1] > 2:
+        pos = pos.iloc[:,1:3].astype(int)
+    if count.shape[1] != pos.shape[0]:
+        logger.error("Count matrix and spatial positions have different number of spots.")
+    return np.array(count), np.array(pos), count.columns, count.index
+
+
 def read_boundary_list(boundary_npyfile, fullpoints):
     # after loading boundary_npyfile, the data has the following structure.
     # array(list of points in Gamma_i, list of points in Gamma_j, ...)
@@ -61,23 +126,3 @@ def read_boundary_list(boundary_npyfile, fullpoints):
                                   fullpoints[:,1].reshape(-1,1) == ycoord.reshape(1,-1))
         boundary_list.append( np.where(is_equal)[0] )
     return boundary_list
-def read_merfish_sample(dir, sample):
-    # cell coordinates and label
-    df = pd.read_csv(f"{dir}/{sample}.features.csv", header=0, index_col=None, sep=",")
-    cells = np.array(df.iloc[:,0])
-    coords = np.array(df[["adjusted.x", "adjusted.y"]])
-    label_l1 = np.array(df.cluster_L1)
-    label_l2 = np.array(df.cluster_L2)
-    label_l3 = np.array(df.cluster_L3)
-    label_list = [label_l1, label_l2, label_l3]
-    # gene names
-    df = pd.read_csv(f"{dir}/{sample}.genes.csv", header=0, index_col=None, sep=",")
-    genes = np.array(df.iloc[:,0])
-    # matrix
-    counts = np.zeros(( len(genes), len(cells) ))
-    df = pd.read_csv(f"{dir}/{sample}.matrix.csv", header=0, index_col=None, sep=",")
-    gid = np.array(df.row) - 1
-    cid = np.array(df.col) - 1
-    val = np.array(df.val)
-    counts[gid, cid] = val
-    return cells, genes, counts, coords, label_list

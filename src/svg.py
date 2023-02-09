@@ -7,6 +7,7 @@ import statsmodels.api as sm
 from sklearn import linear_model,preprocessing
 from scipy.stats import mode
 import matplotlib.pyplot as plt
+from tqdm import trange
 
 
 def select_commonly_expressed_genes(count, q=0.75, threshold=10, pooling=False, depth=None, num_pools=None):
@@ -50,27 +51,27 @@ def segmented_poisson_regression(count, totalumi, dp_labels, depth, opt_function
     :return: A dataframe for the offset and slope of piecewise linear expression function, size of G genes by 2*L layers.
     :rtype: pd.DataFrame
     """
-    
+
     G, N = count.shape
     unique_layers = np.sort(np.unique(dp_labels))
     L = len(unique_layers)
-    
+
     slope_matrix=np.zeros((G,L))
     intercept_matrix=np.zeros((G,L))
-    
-    for g in range(G):
+
+    for g in trange(G):
         for t in np.arange(L):
             pts_t=np.where(dp_labels==t)[0]
-                
+
             slope, intercept = opt_function(count[g,pts_t], xcoords=depth[pts_t], exposure=totalumi[pts_t], alpha=alpha)
-            
+
             slope_matrix[g,t]=slope
             intercept_matrix[g,t]=intercept
-    
+
     combined_params = np.zeros((G, 2*L))
     combined_params[:, np.arange(0, 2*L, 2)] = intercept_matrix
     combined_params[:, np.arange(1, 2*L, 2)] = slope_matrix
-    
+
     df_gene_func = pd.DataFrame(combined_params, columns=sum([[f"intercept {layer}", f"slope {layer}"] for layer in unique_layers], []))
     return df_gene_func
 
@@ -114,7 +115,7 @@ def compute_discontinuity(df_gene_func, dp_labels, depth):
 def bin_data(count, dp_labels, depth):
     exposure=np.sum(count,axis=0) # total UMI per spot
     G,N=count.shape
-    
+
     # BINNING
     binned_depths=np.round(depth) # each bin is centered at an integer
     unique_binned_depths=np.unique(binned_depths)
@@ -131,12 +132,12 @@ def bin_data(count, dp_labels, depth):
         binned_count[:,ind]=np.sum(count[:,bin_pts],axis=1)
         binned_exposure[ind]=np.sum(exposure[bin_pts])
         binned_labels[ind]= int(mode( dp_labels[bin_pts] ).mode[0])
-        
+
         map_1d_bins_to_2d[b]=bin_pts
 
     L=len(np.unique(dp_labels))
     segs=[np.where(binned_labels==i)[0] for i in range(L)]
-    
+
     to_return={}
     to_return['binned_depths']=binned_depths
     to_return['unique_binned_depths']=unique_binned_depths
@@ -145,20 +146,20 @@ def bin_data(count, dp_labels, depth):
     to_return['binned_labels']=binned_labels
     to_return['map_1d_bins_to_2d']=map_1d_bins_to_2d
     to_return['segs']=segs
-    
+
     return to_return
 
 # VISUALIZATION
 def plot_gene_pwlinear(gene_index, idx_kept, count, slope_offsets, depth, binning_output):
     gene_index_idx_kept=np.where(idx_kept==gene_index)[0][0]
     slope_offsets_g=slope_offsets.iloc[gene_index_idx_kept]
-    
+
     unique_binned_depths=binning_output['unique_binned_depths']
     binned_labels=binning_output['binned_labels']
-    
+
     binned_count=binning_output['binned_count']
     binned_exposure=binning_output['binned_exposure']
-    
+
     segs=binning_output['segs']
     L=len(segs)
 
@@ -166,9 +167,9 @@ def plot_gene_pwlinear(gene_index, idx_kept, count, slope_offsets, depth, binnin
 
     for seg in range(L):
         pts_seg=np.where(binned_labels==seg)[0]
-        plt.scatter(unique_binned_depths[pts_seg], 
+        plt.scatter(unique_binned_depths[pts_seg],
                    np.log( (binned_count[gene_index,pts_seg]) / binned_exposure[pts_seg] ))
-        
+
         slope=slope_offsets.iloc[gene_index_idx_kept][f'slope {float(seg)}']
         offset=slope_offsets.iloc[gene_index_idx_kept][f'intercept {float(seg)}']
 
