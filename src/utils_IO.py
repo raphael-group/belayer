@@ -126,3 +126,23 @@ def read_boundary_list(boundary_npyfile, fullpoints):
                                   fullpoints[:,1].reshape(-1,1) == ycoord.reshape(1,-1))
         boundary_list.append( np.where(is_equal)[0] )
     return boundary_list
+def read_merfish_sample(dir, sample):
+    # cell coordinates and label
+    df = pd.read_csv(f"{dir}/{sample}.features.csv", header=0, index_col=None, sep=",")
+    cells = np.array(df.iloc[:,0])
+    coords = np.array(df[["adjusted.x", "adjusted.y"]])
+    label_l1 = np.array(df.cluster_L1)
+    label_l2 = np.array(df.cluster_L2)
+    label_l3 = np.array(df.cluster_L3)
+    label_list = [label_l1, label_l2, label_l3]
+    # gene names
+    df = pd.read_csv(f"{dir}/{sample}.genes.csv", header=0, index_col=None, sep=",")
+    genes = np.array(df.iloc[:,0])
+    # matrix
+    counts = np.zeros(( len(genes), len(cells) ))
+    df = pd.read_csv(f"{dir}/{sample}.matrix.csv", header=0, index_col=None, sep=",")
+    gid = np.array(df.row) - 1
+    cid = np.array(df.col) - 1
+    val = np.array(df.val)
+    counts[gid, cid] = val
+    return cells, genes, counts, coords, label_list
