@@ -3,8 +3,8 @@ import scipy
 import networkx as nx
 from spatialcoord import *
 import logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-logger = logging.getLogger()
+# logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+harmonic_logger = logging.getLogger()
 
 
 def get_signed_distance(coords, endp1, endp2, p_within):
@@ -403,7 +403,7 @@ class harmonic(object):
         '''
         The code below assumes that all in_tissue points are in from of out of tissue points in coords AND in the same order as cluster_annotation.
         '''
-        logger.info("Start computing harmonic interpolation.")
+        harmonic_logger.info("Start computing harmonic interpolation.")
         idx_in_tissue = np.where(in_tissue)[0]
         cleaned = clean_annotation(cluster_annotation, self.adjacency_mat[idx_in_tissue,:][:,idx_in_tissue], \
                                    self.pairwise_dist[idx_in_tissue,:][:,idx_in_tissue])
@@ -460,7 +460,7 @@ class harmonic(object):
                 heats_b1, heats_b2, heats_inside = self.interpolate_two_boundaries(idx_b1, idx_b2, idx_inside)
                 heats[np.concatenate([idx_b1, idx_b2, idx_inside])] = heat_offset + np.concatenate([heats_b1, heats_b2, heats_inside])
                 heat_offset += np.max(np.concatenate([heats_b1, heats_b2, heats_inside]))
-        logger.info("Finish computing harmonic interpolation.")
+        harmonic_logger.info("Finish computing harmonic interpolation.")
         return heats, list_boundary, current_labels
 
 

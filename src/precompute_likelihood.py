@@ -13,7 +13,7 @@ def precompute_batch(F_glmpca, coords, max_nlayers, FOLDER_TO_SAVE_LOSSES_IN, ba
     F_full_glmpca[in_tissue] = F_glmpca
 
     # construct loss function/likelihood computing object
-    llf = lossfunction(F_full_glmpca.T, fullpoints[:,0], fullpoints[:,1], total_num_cluster=max_nlayers,  platform="Visium")
+    llf = lossfunction(F_full_glmpca.T, fullpoints[:,0], fullpoints[:,1], total_num_cluster=max_nlayers, consider_points=in_tissue, platform="Visium")
     llf.F_glmpca_2d_poisson = F_full_glmpca
 
     # get points on layer boundaries by Delaunay triangulatioon
@@ -21,9 +21,9 @@ def precompute_batch(F_glmpca, coords, max_nlayers, FOLDER_TO_SAVE_LOSSES_IN, ba
 
     # enumerate (1) 4-tuple of boundary points to define an interior region and (2) triple of boundary points to define the first/last layer region.
     boundary_tuples = get_full_boundary_tuples_from_sorted(sorted_boundary)
-    logger.info("There are {} tuples of boundary end points.".format( len(boundary_tuples) ))
+    print("There are {} tuples of boundary end points.".format( len(boundary_tuples) ))
     boundary_triples = get_full_boundary_triples_from_sorted(sorted_boundary)
-    logger.info("There are {} triples of boundary end points for half circle regions.".format(len(boundary_triples)))
+    print("There are {} triples of boundary end points for half circle regions.".format(len(boundary_triples)))
 
     # output dictionary
     pre_saving = {}
@@ -76,7 +76,7 @@ class precompute_class(object):
         F_full_glmpca[in_tissue] = F_glmpca
 
         # construct loss function/likelihood computing object
-        llf = lossfunction(F_full_glmpca.T, fullpoints[:,0], fullpoints[:,1], total_num_cluster=max_nlayers,  platform="Visium")
+        llf = lossfunction(F_full_glmpca.T, fullpoints[:,0], fullpoints[:,1], total_num_cluster=max_nlayers, consider_points=in_tissue, platform="Visium")
         llf.F_glmpca_2d_poisson = F_full_glmpca
 
         # get points on layer boundaries by Delaunay triangulatioon
@@ -84,9 +84,9 @@ class precompute_class(object):
 
         # enumerate (1) 4-tuple of boundary points to define an interior region and (2) triple of boundary points to define the first/last layer region.
         boundary_tuples = get_full_boundary_tuples_from_sorted(sorted_boundary)
-        logger.info("There are {} tuples of boundary end points.".format( len(boundary_tuples) ))
+        print("There are {} tuples of boundary end points.".format( len(boundary_tuples) ))
         boundary_triples = get_full_boundary_triples_from_sorted(sorted_boundary)
-        logger.info("There are {} triples of boundary end points for half circle regions.".format(len(boundary_triples)))
+        print("There are {} triples of boundary end points for half circle regions.".format(len(boundary_triples)))
 
         # class attribute
         self.in_tissue = in_tissue
@@ -148,5 +148,5 @@ class precompute_class(object):
             if pre_saving is None:
                 pre_saving = tmp
             else:
-                pre_saving = pre_saving.update(tmp)
+                pre_saving.update(tmp)
         pickle.dump(pre_saving, open(f"{self.FOLDER_TO_SAVE_LOSSES_IN}_pre_saving.pkl", 'wb'))
